@@ -81,13 +81,10 @@ def filter_by_name(import_data, filter_words):
     
     for episode_number, episode in import_data.items():
         should_keep = True
-<<<<<<< Updated upstream
-=======
         if not episode.name:
             filtered_data[episode_number] = episode
             continue
   
->>>>>>> Stashed changes
         for word in filter_list:
             if word and word in episode.name:
                 should_keep = False
