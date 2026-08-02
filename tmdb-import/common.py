@@ -1,6 +1,8 @@
 import configparser
 import os
 import re
+import requests
+from urllib.parse import urlparse
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8-sig')
 
@@ -82,19 +84,51 @@ def filter_by_name(import_data, filter_words):
         if not episode.name:
             filtered_data[episode_number] = episode
             continue
-
+  
         for word in filter_list:
             if word and word in episode.name:
                 should_keep = False
                 break
         if should_keep:
             filtered_data[episode_number] = episode
-
+    
     return filtered_data
+
+def download_backdrop(url, save_path, episode_number):
+    if not url:
+        return ""
+    
+    try:
+        # 创建保存目录
+        os.makedirs(save_path, exist_ok=True)
+        
+        # 获取文件扩展名
+        parsed_url = urlparse(url)
+        file_ext = os.path.splitext(parsed_url.path)[1]
+        if not file_ext:
+            file_ext = '.jpg'
+            
+        # 构建保存路径
+        file_path = os.path.join(save_path, f"{episode_number}{file_ext}")
+        
+        # 下载图片
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        
+        # 保存图片
+        with open(file_path, 'wb') as f:
+            f.write(response.content)
+            
+        return file_path
+    except Exception as e:
+        print(f"下载图片失败: {str(e)}")
+        return ""
 
 def create_csv(filename, import_data = {}):
     encoding = config.get("DEFAULT","encoding", fallback="utf-8-sig")
     filter_words = config.get("DEFAULT", "filter_words", fallback="")
+    download_backdrop_enabled = config.getboolean("DEFAULT", "download_backdrop", fallback=False)
+    
     import_data = remove_duplicate_overview(import_data)
     import_data = remove_duplicate_backdrop(import_data)
     import_data = filter_by_name(import_data, filter_words)
@@ -108,8 +142,29 @@ def create_csv(filename, import_data = {}):
         episode_count += 1
     import_data = renumbered_data
 
+    # 从环境变量获取脚本名称
+    import os
+    command_name = os.environ.get('TMDB_SCRIPT_NAME', 'import')
+    
+    # 使用脚本名称作为 CSV 文件名
+    csv_filename = f"{command_name}.csv"
+    
+    # 如果需要下载backdrop
+    if download_backdrop_enabled:
+        # 使用脚本名称作为图片文件夹名
+        backdrop_dir = os.path.join(os.path.dirname(filename), command_name)
+        
+        for episode in import_data.values():
+            if episode.backdrop:
+                # 保存原始URL
+                original_url = episode.backdrop
+                # 下载图片到本地
+                local_path = download_backdrop(original_url, backdrop_dir, episode.episode_number)
+                # 保持原始URL在CSV中
+                episode.backdrop = original_url
+
     import csv
-    with open(filename, "w", newline='', encoding=encoding) as csvfile:
+    with open(csv_filename, "w", newline='', encoding=encoding) as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(list(import_data.values())[0].csv_header)
         writer.writerows(list(import_data.values()))
