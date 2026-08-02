@@ -118,6 +118,10 @@ def download_backdrop(url, save_path, episode_number):
         # 保存图片
         with open(file_path, 'wb') as f:
             f.write(response.content)
+
+        # 检查并处理分辨率与 16:9 比例
+        from .processors.image import process_downloaded_backdrop
+        process_downloaded_backdrop(file_path)
             
         return file_path
     except Exception as e:

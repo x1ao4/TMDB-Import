@@ -1,11 +1,83 @@
 from PIL import Image, ImageOps
 import logging
-import bordercrop
 import re
 
 TYPE_BACKDROP = "backdrop"
 TYPE_POSTER = "poster"
 TYPE_FITSIZE = "fitsize"
+
+# TMDB backdrop 分辨率与比例要求
+BACKDROP_MIN_WIDTH = 1280
+BACKDROP_MIN_HEIGHT = 720
+BACKDROP_MAX_WIDTH = 3840
+BACKDROP_MAX_HEIGHT = 2160
+BACKDROP_ASPECT_RATIO = 16 / 9
+
+def _scale_backdrop_resolution(width, height):
+    """等比缩放分辨率，使其落在最小与最大分辨率范围内"""
+    # 超出最大分辨率时等比缩小
+    if width > BACKDROP_MAX_WIDTH or height > BACKDROP_MAX_HEIGHT:
+        scale = min(BACKDROP_MAX_WIDTH / width, BACKDROP_MAX_HEIGHT / height)
+        width = round(width * scale)
+        height = round(height * scale)
+
+    # 低于最小分辨率时等比放大
+    if width < BACKDROP_MIN_WIDTH or height < BACKDROP_MIN_HEIGHT:
+        scale = max(BACKDROP_MIN_WIDTH / width, BACKDROP_MIN_HEIGHT / height)
+        new_width = round(width * scale)
+        new_height = round(height * scale)
+
+        # 放大后若超出最大分辨率，则以最大分辨率为上限再次等比缩小
+        if new_width > BACKDROP_MAX_WIDTH or new_height > BACKDROP_MAX_HEIGHT:
+            scale = min(BACKDROP_MAX_WIDTH / width, BACKDROP_MAX_HEIGHT / height)
+            new_width = round(width * scale)
+            new_height = round(height * scale)
+
+        width, height = new_width, new_height
+
+    return width, height
+
+def _crop_backdrop_to_16_9(image):
+    """居中裁切为 16:9 比例"""
+    width, height = image.size
+    current_ratio = width / height
+
+    if abs(current_ratio - BACKDROP_ASPECT_RATIO) < 0.001:
+        return image
+
+    if current_ratio > BACKDROP_ASPECT_RATIO:
+        # 图片过宽，裁切左右
+        new_width = round(height * BACKDROP_ASPECT_RATIO)
+        left = (width - new_width) // 2
+        return image.crop((left, 0, left + new_width, height))
+
+    # 图片过高，裁切上下
+    new_height = round(width / BACKDROP_ASPECT_RATIO)
+    top = (height - new_height) // 2
+    return image.crop((0, top, width, top + new_height))
+
+def process_downloaded_backdrop(image_path):
+    """处理下载到本地的 backdrop 图片，满足 TMDB 分辨率与 16:9 比例要求"""
+    try:
+        convert_to_jpg(image_path)
+
+        image = Image.open(image_path)
+        width, height = image.size
+
+        # 第一步：处理分辨率
+        target_width, target_height = _scale_backdrop_resolution(width, height)
+        if target_width != width or target_height != height:
+            image = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+        # 第二步：处理 16:9 比例
+        image = _crop_backdrop_to_16_9(image)
+
+        image.save(image_path, format="JPEG", quality=92)
+        image.close()
+        return True
+    except Exception as err:
+        logging.error(f"Backdrop 图片处理失败: {err}")
+        return False
 
 def convert_to_jpg(image_path):
     image = Image.open(image_path)
@@ -20,6 +92,7 @@ def convert_to_jpg(image_path):
 
 def crop_black_border(image_path):
     try:
+        import bordercrop
         image = Image.open(image_path)       
         tempImage = bordercrop.crop(image_path, 2, round(min(image.size[0], image.size[1])*0.9999), 50)
         if (tempImage.size[0] < image.size[0] or tempImage.size[1] < image.size[1]):
