@@ -111,6 +111,10 @@ def download_backdrop(url, save_path, episode_number):
         # 构建保存路径
         file_path = os.path.join(save_path, f"{episode_number}{file_ext}")
         
+        # 本地文件已存在且非空时静默跳过下载
+        if os.path.isfile(file_path) and os.path.getsize(file_path) > 0:
+            return file_path
+        
         # 下载图片
         response = requests.get(url, timeout=30)
         response.raise_for_status()
