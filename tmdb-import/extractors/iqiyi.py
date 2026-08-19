@@ -83,6 +83,9 @@ def _clean_episode_overview(name, overview):
             overview, count = re.subn(theme_pattern, "", overview, count=1)
             if count:
                 break
+    else:
+        # 带分集标记(一)(二)/上中下的正片，概览可能直接粘贴正文无分隔符
+        overview, count = re.subn(rf"^{escaped}", "", overview, count=1)
 
     return overview
 

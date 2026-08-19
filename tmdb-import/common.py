@@ -81,12 +81,12 @@ def filter_by_name(import_data, filter_words):
     
     for episode_number, episode in import_data.items():
         should_keep = True
-        if not episode.name:
+        if not episode.name and not episode.overview:
             filtered_data[episode_number] = episode
             continue
   
         for word in filter_list:
-            if word and word in episode.name:
+            if word and (word in episode.name or word in episode.overview):
                 should_keep = False
                 break
         if should_keep:
